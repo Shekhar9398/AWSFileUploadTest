@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Bucket
+   uuid = "93C9FEF5-4032-4FD3-8B8C-C7777C98DB5E"
+   type = "1"
+   version = "2.0">
+   <Breakpoints>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "25AEF3F6-37E3-474A-9E08-DBA1A545CE9E"
+            shouldBeEnabled = "Yes"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "AWSUploadTest/AudioManager.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "66"
+            endingLineNumber = "66"
+            landmarkName = "requestMicrophonePermission()"
+            landmarkType = "7">
+            <Locations>
+               <Location
+                  uuid = "25AEF3F6-37E3-474A-9E08-DBA1A545CE9E - aaf401940643bc58"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "closure #1 (Swift.CheckedContinuation&lt;Swift.Bool, Swift.Never&gt;) -&gt; () in AWSUploadTest.AudioManager.requestMicrophonePermission() async -&gt; Swift.Bool"
+                  moduleName = "AWSUploadTest.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/mac/Desktop/AWSUploadTest/AWSUploadTest/AudioManager.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "66"
+                  endingLineNumber = "66">
+               </Location>
+               <Location
+                  uuid = "25AEF3F6-37E3-474A-9E08-DBA1A545CE9E - b9b823aca0e76c28"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "closure #1 @Sendable (Swift.Bool) -&gt; () in closure #1 (Swift.CheckedContinuation&lt;Swift.Bool, Swift.Never&gt;) -&gt; () in AWSUploadTest.AudioManager.requestMicrophonePermission() async -&gt; Swift.Bool"
+                  moduleName = "AWSUploadTest.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/mac/Desktop/AWSUploadTest/AWSUploadTest/AudioManager.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "67"
+                  endingLineNumber = "67">
+               </Location>
+            </Locations>
+         </BreakpointContent>
+      </BreakpointProxy>
+   </Breakpoints>
+</Bucket>

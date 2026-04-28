@@ -8,14 +8,28 @@
 import SwiftUI
 
 struct ContentView: View {
+    @State private var shouldRecord: Bool = false
+    
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        VStack{
+            Button {
+                shouldRecord.toggle()
+            } label: {
+                Image(systemName: "microphone")
+                    .resizable()
+                    .frame(width: 60, height: 90)
+                    .foregroundStyle(shouldRecord ? .red : .mint)
+                
+            }
         }
-        .padding()
+        .onAppear {
+            if shouldRecord{
+                AudioManager.shared.startRecording()
+            }else{
+                AudioManager.shared.stopRecording()
+            }
+            
+        }
     }
 }
 
