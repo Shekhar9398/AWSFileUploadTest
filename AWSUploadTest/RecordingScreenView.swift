@@ -45,6 +45,11 @@ struct RecordingScreenView: View {
             .navigationDestination(item: $savedFile) { url in
                 JSONPreviewView(fileURL: url)
             }
+            .onChange(of: savedFile) { _, newValue in
+                if newValue == nil {
+                    resetForNextSession()
+                }
+            }
         }
     }
 }
@@ -153,6 +158,12 @@ private extension RecordingScreenView {
 
     func documentsURL() -> URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    }
+
+    // MARK: - Reset state so the user can record a fresh set of sentences
+    func resetForNextSession() {
+        sentences.removeAll()
+        speech.resetTranscript()
     }
 }
 
