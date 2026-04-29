@@ -1,160 +1,161 @@
 //
-//  ContentView.swift
+//  RecordingScreenView.swift
 //  AWSUploadTest
-//
-//  Created by Mac on 28/04/26.
 //
 
 import SwiftUI
 
+// MARK: - Main flow: record 3 sentences, then export them as JSON
 struct RecordingScreenView: View {
-    
-    @StateObject private var speechManager = SpeechManager.shared
-    
-    @State private var currentStep: Int = 1
-    @State private var records: [SentenceRecord] = []
-    @State private var showCreateButton: Bool = false
-    
-    @State private var navigateToPreview = false
-    @State private var createdFileURL: URL?
-    
+
+    // MARK: - Constants
+    private let totalSentences = 3
+
+    // MARK: - State
+    @StateObject private var speech = SpeechManager.shared
+    @State private var sentences: [SentenceRecord] = []
+    @State private var savedFile: URL?
+
+    // MARK: - Derived state
+    private var currentStep: Int { min(sentences.count + 1, totalSentences) }
+    private var isFinished: Bool { sentences.count == totalSentences }
+
+    // MARK: - Body
     var body: some View {
-        NavigationStack{
-            VStack(spacing: 30) {
-                
-                // Instruction
-                if currentStep == 1 && records.isEmpty {
-                    Text("You will record 3 sentences.\nTap Start and speak clearly.")
-                        .multilineTextAlignment(.center)
-                }
-                
-                // Step title
-                if currentStep <= 3 {
-                    Text("Speak your \(ordinal(currentStep)) sentence")
-                        .font(.title2)
-                }
-                
-                // Mic Button
-                Button {
-                    Task {
-                        if speechManager.isRecording {
-                            stopAndSave()
-                        } else {
-                            await speechManager.startRecording()
-                        }
-                    }
-                } label: {
-                    Image(systemName: "mic.fill")
-                        .resizable()
-                        .frame(width: 60, height: 80)
-                        .foregroundStyle(speechManager.isRecording ? .red : .blue)
-                }
-                
-                // Live transcript (optional but useful)
-                Text(speechManager.transcript)
-                    .padding()
-                
-                // Show recorded sentences
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(records) { record in
-                        Text("\(record.sentenceNumber). \(record.sentenceSpoken)")
+        NavigationStack {
+            ZStack {
+                Theme.background.ignoresSafeArea()
+
+                VStack(spacing: 24) {
+                    header
+                    transcriptCard
+                    Spacer(minLength: 0)
+                    MicButton(isRecording: speech.isRecording, action: toggleRecording)
+                        .disabled(isFinished)
+                        .opacity(isFinished ? 0.4 : 1)
+                    Spacer(minLength: 0)
+                    recordedList
+                    if isFinished {
+                        PrimaryButton("Create JSON", systemImage: "doc.badge.plus", action: exportJSON)
                     }
                 }
-                
-                // Create JSON Button
-                if showCreateButton {
-                    Button("Create JSON") {
-                        createJSONFile()
-                    }
-                    .padding()
-                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 16)
             }
-            .padding()
-            .navigationDestination(isPresented: $navigateToPreview) {
-                if let url = createdFileURL {
-                    JSONPreviewView(fileURL: url)
-                }
+            .navigationDestination(item: $savedFile) { url in
+                JSONPreviewView(fileURL: url)
             }
         }
     }
 }
 
-extension RecordingScreenView {
-    
-    func stopAndSave() {
-        speechManager.stopRecording()
-        
-        let text = speechManager.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        guard !text.isEmpty else { return }
-        
-        let record = SentenceRecord(
-            id: UUID().uuidString,
-            sentenceNumber: currentStep,
-            sentenceSpoken: text,
-            createdAt: Date()
-        )
-        
-        records.append(record)
-        
-        // Reset transcript for next input
-        speechManager.transcript = ""
-        
-        if currentStep < 3 {
-            currentStep += 1
+// MARK: - Header (title, subtitle, progress dots)
+private extension RecordingScreenView {
+
+    var header: some View {
+        VStack(spacing: 10) {
+            Text(isFinished ? "All set!" : "Sentence \(currentStep) of \(totalSentences)")
+                .font(.title2.bold())
+                .foregroundStyle(.primary)
+
+            Text(isFinished
+                 ? "Tap below to save your sentences as JSON."
+                 : "Tap the mic and speak clearly.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            StepDots(total: totalSentences, current: currentStep)
+                .padding(.top, 4)
+        }
+        .padding(.top, 8)
+    }
+}
+
+// MARK: - Live transcript bubble
+private extension RecordingScreenView {
+
+    var transcriptCard: some View {
+        Text(speech.transcript.isEmpty ? "Your speech will appear here…" : speech.transcript)
+            .font(.body)
+            .foregroundStyle(speech.transcript.isEmpty ? .secondary : .primary)
+            .frame(maxWidth: .infinity, minHeight: 80, alignment: .leading)
+            .padding(16)
+            .background(.white.opacity(0.85), in: RoundedRectangle(cornerRadius: Theme.radius))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.radius)
+                    .stroke(speech.isRecording ? Theme.danger : Color.black.opacity(0.06),
+                            lineWidth: speech.isRecording ? 2 : 1)
+            )
+            .animation(.easeInOut(duration: 0.2), value: speech.isRecording)
+    }
+}
+
+// MARK: - List of saved sentences (cards)
+private extension RecordingScreenView {
+
+    var recordedList: some View {
+        VStack(spacing: 10) {
+            ForEach(sentences) { record in
+                SentenceCard(record: record)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: sentences)
+    }
+}
+
+// MARK: - Actions
+private extension RecordingScreenView {
+
+    // MARK: - Toggle the mic — start, or stop and save the spoken sentence
+    func toggleRecording() {
+        if speech.isRecording {
+            stopAndSaveSentence()
         } else {
-            showCreateButton = true
+            Task { await speech.startRecording() }
         }
     }
-    
-    func ordinal(_ number: Int) -> String {
-        switch number {
-        case 1: return "1st"
-        case 2: return "2nd"
-        case 3: return "3rd"
-        default: return "\(number)th"
-        }
-    }
-}
 
-extension RecordingScreenView {
-    
-    func createJSONFile() {
+    // MARK: - Stop the mic and store the trimmed transcript as a record
+    func stopAndSaveSentence() {
+        speech.stopRecording()
+        let text = speech.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+
+        sentences.append(SentenceRecord(number: sentences.count + 1, text: text))
+        speech.resetTranscript()
+    }
+
+    // MARK: - Encode all sentences to JSON and write to the documents folder
+    func exportJSON() {
         let encoder = JSONEncoder()
-        encoder.outputFormatting = .prettyPrinted
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
-        
+
         do {
-            let data = try encoder.encode(records)
-            
-            let fileName = "Audio-\(formattedDate()).json"
-            
-            let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                .appendingPathComponent(fileName)
-            
-            try data.write(to: url)
-            
-            print("SON saved at:", url)
-            
-            // store + navigate
-            createdFileURL = url
-            navigateToPreview = true
-            
+            let data = try encoder.encode(sentences)
+            let url = documentsURL().appendingPathComponent(makeFileName())
+            try data.write(to: url, options: .atomic)
+            savedFile = url
+            print("JSON saved at:", url.path)
         } catch {
-            print("Failed to create JSON:", error)
+            print("Failed to write JSON:", error.localizedDescription)
         }
     }
-    
-    func formattedDate() -> String {
+
+    // MARK: - Build a filesystem-safe file name like "Audio-2026-04-29_14-32.json"
+    func makeFileName() -> String {
         let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd hh:mm"
-        return formatter.string(from: Date())
+        formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+        return "Audio-\(formatter.string(from: Date())).json"
+    }
+
+    func documentsURL() -> URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
     }
 }
-
 
 #Preview {
     RecordingScreenView()
 }
-
-

@@ -2,16 +2,16 @@
 //  AWSUploadTestApp.swift
 //  AWSUploadTest
 //
-//  Created by Mac on 28/04/26.
-//
 
 import SwiftUI
 
+// MARK: - App entry point
 @main
 struct AWSUploadTestApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .preferredColorScheme(.light)
         }
     }
 }

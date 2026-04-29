@@ -1,158 +1,126 @@
 //
-//  SpeechManager.swift
+//  AudioManager.swift
 //  AWSUploadTest
 //
-//  Created by Mac on 29/04/26.
-//
-import Combine
+
 import AVFoundation
+import Combine
 import Speech
 
+// MARK: - Live mic capture + on-device speech-to-text
 @MainActor
 final class SpeechManager: ObservableObject {
-        
-    // MARK: - Singleton
+
+    // MARK: - Singleton (one mic session for the whole app)
     static let shared = SpeechManager()
     private init() {}
-    
-    // MARK: - Published State
+
+    // MARK: - Published state observed by the UI
     @Published var transcript: String = ""
-    @Published private(set) var spokenWords: [String] = []
     @Published private(set) var isRecording: Bool = false
-    
-    // MARK: - Private Properties
+
+    // MARK: - Audio + Speech engines
     private let audioEngine = AVAudioEngine()
-    private let speechRecognizer = SFSpeechRecognizer()
-    
-    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
-    private var recognitionTask: SFSpeechRecognitionTask?
-    
+    private let recognizer = SFSpeechRecognizer()
+
+    private var request: SFSpeechAudioBufferRecognitionRequest?
+    private var task: SFSpeechRecognitionTask?
+
     // MARK: - Public API
-    
     func startRecording() async {
         guard !isRecording else { return }
-        
-        let hasPermission = await requestPermissions()
-        guard hasPermission else {
-            print("Permissions not granted")
+
+        guard await hasPermissions() else {
+            print("SpeechManager: permissions denied")
             return
         }
-        
+
         do {
-            try startAudioSession()
-            try startRecognition()
+            try configureAudioSession()
+            try beginRecognition()
             isRecording = true
         } catch {
-            print("Failed to start recording:", error)
+            print("SpeechManager: failed to start —", error.localizedDescription)
             stopRecording()
         }
-        
-        print("SpeechManger: Recording is started")
     }
-    
+
     func stopRecording() {
-        guard isRecording else { return }
-        
+        guard isRecording || audioEngine.isRunning else {
+            isRecording = false
+            return
+        }
+
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
-        
-        recognitionRequest?.endAudio()
-        recognitionTask?.cancel()
-        
-        recognitionTask = nil
-        recognitionRequest = nil
-        
+
+        request?.endAudio()
+        task?.cancel()
+
+        request = nil
+        task = nil
         isRecording = false
-        
-        print("SpeechManager: Recording is stopped")
+    }
+
+    func resetTranscript() {
+        transcript = ""
     }
 }
 
-// MARK: - Setup
+// MARK: - Audio session + recognition setup
 private extension SpeechManager {
-    
-    func startAudioSession() throws {
+
+    // MARK: - Configure the shared audio session for recording
+    func configureAudioSession() throws {
         let session = AVAudioSession.sharedInstance()
-        
         try session.setCategory(.record, mode: .measurement, options: [.duckOthers])
         try session.setActive(true, options: .notifyOthersOnDeactivation)
     }
-    
-    func startRecognition() throws {
-        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
-        
-        guard let recognitionRequest = recognitionRequest else {
-            throw NSError(domain: "SpeechManager", code: -1)
-        }
-        
-        recognitionRequest.shouldReportPartialResults = true
-        
+
+    // MARK: - Wire up the speech recognition pipeline
+    func beginRecognition() throws {
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+        self.request = request
+
         let inputNode = audioEngine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
-        
-        recognitionTask = speechRecognizer?.recognitionTask(
-            with: recognitionRequest,
-            resultHandler: { [weak self] result, error in
-                guard let self = self else { return }
-                
-                if let result = result {
-                    self.handleRecognition(result: result)
-                }
-                
-                if error != nil {
-                    self.stopRecording()
-                }
-            }
-        )
-        
-        inputNode.installTap(onBus: 0,
-                             bufferSize: 1024,
-                             format: format) { [weak self] buffer, _ in
-            self?.recognitionRequest?.append(buffer)
+
+        task = recognizer?.recognitionTask(with: request) { [weak self] result, error in
+            guard let self else { return }
+            if let result { self.transcript = result.bestTranscription.formattedString }
+            if error != nil { self.stopRecording() }
         }
-        
+
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+            self?.request?.append(buffer)
+        }
+
         audioEngine.prepare()
         try audioEngine.start()
     }
 }
 
-// MARK: - Processing
+// MARK: - Permission helpers
 private extension SpeechManager {
-    func handleRecognition(result: SFSpeechRecognitionResult) {
-        let text = result.bestTranscription.formattedString
-        
-        transcript = text
-        
-        spokenWords = text
-            .split(whereSeparator: { $0.isWhitespace })
-            .map { String($0) }
-        print("SpeechManager: Spoken words are : \(spokenWords)")
-    }
-}
 
-// MARK: - Permissions
-private extension SpeechManager {
-    
-    func requestPermissions() async -> Bool {
-        let mic = await requestMicrophonePermission()
-        let speech = await requestSpeechPermission()
-        
-        return mic && speech
+    // MARK: - Ask both mic + speech permissions in parallel
+    func hasPermissions() async -> Bool {
+        async let mic = askMic()
+        async let speech = askSpeech()
+        let (gotMic, gotSpeech) = await (mic, speech)
+        return gotMic && gotSpeech
     }
-    
-    func requestMicrophonePermission() async -> Bool {
-        await withCheckedContinuation { continuation in
-            AVAudioApplication.requestRecordPermission() { granted in
-                continuation.resume(returning: granted)
-            }
+
+    func askMic() async -> Bool {
+        await withCheckedContinuation { cont in
+            AVAudioApplication.requestRecordPermission { cont.resume(returning: $0) }
         }
     }
-    
-    func requestSpeechPermission() async -> Bool {
-        await withCheckedContinuation { continuation in
-            SFSpeechRecognizer.requestAuthorization { status in
-                continuation.resume(returning: status == .authorized)
-            }
+
+    func askSpeech() async -> Bool {
+        await withCheckedContinuation { cont in
+            SFSpeechRecognizer.requestAuthorization { cont.resume(returning: $0 == .authorized) }
         }
     }
 }
